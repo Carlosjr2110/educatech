@@ -1,0 +1,305 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { Users, UserPlus, Edit, Trash2, Search, BookOpen } from "lucide-react";
+import { Turma } from "@/app/types/turma";
+import { Aluno, Responsavel } from "@/app/types/users";
+import { getTurmas, getAlunos, getResponsaveis, addAluno, updateAluno, deleteAluno } from "@/app/services/turmas";
+
+interface TurmasClientProps {
+  userId: string;
+  userRole: string;
+}
+
+export default function TurmasClient({ userId, userRole }: TurmasClientProps) {
+  const [turmas, setTurmas] = useState<Turma[]>([]);
+  const [alunos, setAlunos] = useState<Aluno[]>([]);
+  const [responsaveis, setResponsaveis] = useState<Responsavel[]>([]);
+  const [turmaSelecionada, setTurmaSelecionada] = useState<Turma | null>(null);
+  const [alunosTurma, setAlunosTurma] = useState<Aluno[]>([]);
+  const [busca, setBusca] = useState("");
+  const [modalAberto, setModalAberto] = useState(false);
+  const [modoEdicao, setModoEdicao] = useState(false);
+  const [alunoEditando, setAlunoEditando] = useState<Aluno | null>(null);
+
+  const [formData, setFormData] = useState({
+    name: "",
+    email: "",
+    matricula: "",
+    turma_id: "",
+    responsavel_id: ""
+  });
+
+  // Buscar dados da API via service
+  const fetchData = async () => {
+    try {
+      const [turmasRes, alunosRes, responsaveisRes] = await Promise.all([
+        userRole === "professor" ? getTurmas(userId) : getTurmas(),
+        getAlunos(),
+        getResponsaveis()
+      ]);
+      setTurmas(turmasRes);
+      setAlunos(alunosRes);
+      setResponsaveis(responsaveisRes);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  // Atualiza lista de alunos da turma selecionada
+  useEffect(() => {
+    if (turmaSelecionada) {
+      setAlunosTurma(alunos.filter(a => a.turma_id === turmaSelecionada.id));
+      setFormData(prev => ({ ...prev, turma_id: turmaSelecionada.id }));
+    } else {
+      setAlunosTurma([]);
+    }
+  }, [turmaSelecionada, alunos]);
+
+  const alunosFiltrados = alunosTurma.filter(aluno =>
+    aluno.name.toLowerCase().includes(busca.toLowerCase()) ||
+    aluno.matricula.includes(busca) ||
+    aluno.email.toLowerCase().includes(busca.toLowerCase())
+  );
+
+  const abrirModalNovoAluno = () => {
+    setModoEdicao(false);
+    setAlunoEditando(null);
+    setFormData({
+      name: "",
+      email: "",
+      matricula: "",
+      turma_id: turmaSelecionada?.id || "",
+      responsavel_id: ""
+    });
+    setModalAberto(true);
+  };
+
+  const abrirModalEditarAluno = (aluno: Aluno) => {
+    setModoEdicao(true);
+    setAlunoEditando(aluno);
+    setFormData({
+      name: aluno.name,
+      email: aluno.email,
+      matricula: aluno.matricula,
+      turma_id: aluno.turma_id,
+      responsavel_id: aluno.responsavel_id || ""
+    });
+    setModalAberto(true);
+  };
+
+  const fecharModal = () => {
+    setModalAberto(false);
+    setAlunoEditando(null);
+    setFormData({
+      name: "",
+      email: "",
+      matricula: "",
+      turma_id: "",
+      responsavel_id: ""
+    });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      if (modoEdicao && alunoEditando) {
+        await updateAluno(alunoEditando.id, formData);
+      } else {
+        await addAluno({
+          ...formData,
+          password: "temp123",
+          role: "aluno",
+          created_at: new Date()
+        });
+      }
+      await fetchData();
+      fecharModal();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const excluirAluno = async (id: string) => {
+    if (!confirm("Deseja realmente excluir este aluno?")) return;
+    try {
+      await deleteAluno(id);
+      await fetchData();
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const getResponsavel = (id?: string) => {
+    if (!id) return null;
+    return responsaveis.find(r => r.id === id);
+  };
+
+  const getTurnoTexto = (turno: string) => {
+    switch (turno) {
+      case 'manha': return 'Manhã';
+      case 'tarde': return 'Tarde';
+      case 'noite': return 'Noite';
+      default: return turno;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-6">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 mb-6">
+          <div className="flex justify-between items-center">
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-3">
+              <Users className="text-blue-600" /> Minhas Turmas
+            </h1>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Lista de Turmas */}
+          <div className="lg:col-span-1">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Turmas ({turmas.length})
+              </h2>
+              <div className="space-y-2">
+                {turmas.map(turma => (
+                  <button
+                    key={turma.id}
+                    onClick={() => setTurmaSelecionada(turma)}
+                    className={`w-full text-left p-3 rounded-lg transition-colors ${
+                      turmaSelecionada?.id === turma.id
+                        ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
+                        : 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                    }`}
+                  >
+                    <div className="font-medium">{turma.nome}</div>
+                    <div className="text-sm opacity-75">
+                      {getTurnoTexto(turma.turno ?? "")} • {turma.serie}
+                    </div>
+                    <div className="text-xs opacity-60 mt-1">
+                      {alunos.filter(a => a.turma_id === turma.id).length} alunos
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Lista de Alunos */}
+          <div className="lg:col-span-3">
+            {turmaSelecionada ? (
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm">
+                {/* Header da Turma */}
+                <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                  <div>
+                    <h2 className="text-xl font-semibold text-gray-900 dark:text-white">{turmaSelecionada.nome}</h2>
+                    <p className="text-gray-600 dark:text-gray-300">
+                      {getTurnoTexto(turmaSelecionada.turno ?? "")} • {turmaSelecionada.serie} • {alunosTurma.length} alunos
+                    </p>
+                  </div>
+                  <button
+                    onClick={abrirModalNovoAluno}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2"
+                  >
+                    <UserPlus size={20} /> Adicionar Aluno
+                  </button>
+                </div>
+
+                {/* Busca */}
+                <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                  <div className="flex gap-4">
+                    <div className="flex-1 relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                      <input
+                        type="text"
+                        placeholder="Buscar alunos..."
+                        value={busca}
+                        onChange={(e) => setBusca(e.target.value)}
+                        className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Lista de Alunos */}
+                <div className="overflow-x-auto">
+                  {alunosFiltrados.length === 0 ? (
+                    <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+                      <Users className="mx-auto h-12 w-12 opacity-50" />
+                      <p className="mt-4">{busca ? "Nenhum aluno encontrado" : "Nenhum aluno nesta turma"}</p>
+                    </div>
+                  ) : (
+                    <table className="w-full">
+                      <thead className="bg-gray-50 dark:bg-gray-700">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Aluno</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Email</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Matrícula</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Responsável</th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
+                        {alunosFiltrados.map(aluno => {
+                          const resp = getResponsavel(aluno.responsavel_id);
+                          return (
+                            <tr key={aluno.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                              <td className="px-6 py-4">{aluno.name}</td>
+                              <td className="px-6 py-4">{aluno.email}</td>
+                              <td className="px-6 py-4">{aluno.matricula}</td>
+                              <td className="px-6 py-4">{resp ? `${resp.name} (${resp.telefone || "-"})` : "Não vinculado"}</td>
+                              <td className="px-6 py-4 flex gap-2">
+                                <button onClick={() => abrirModalEditarAluno(aluno)} className="text-blue-600"><Edit size={16} /></button>
+                                <button onClick={() => excluirAluno(aluno.id)} className="text-red-600"><Trash2 size={16} /></button>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-8 text-center">
+                <BookOpen className="mx-auto h-12 w-12 text-gray-400" />
+                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-white">Selecione uma turma</h3>
+                <p className="mt-2 text-gray-500 dark:text-gray-400">Escolha uma turma à esquerda para ver os alunos</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Modal */}
+        {modalAberto && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                {modoEdicao ? "Editar Aluno" : "Adicionar Aluno"}
+              </h3>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <input type="text" placeholder="Nome" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full p-2 border rounded-md"/>
+                <input type="email" placeholder="Email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full p-2 border rounded-md"/>
+                <input type="text" placeholder="Matrícula" value={formData.matricula} onChange={e => setFormData({...formData, matricula: e.target.value})} className="w-full p-2 border rounded-md"/>
+                <select value={formData.responsavel_id} onChange={e => setFormData({...formData, responsavel_id: e.target.value})} className="w-full p-2 border rounded-md">
+                  <option value="">Selecionar responsável</option>
+                  {responsaveis.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+                <div className="flex gap-3 pt-4">
+                  <button type="submit" className="flex-1 bg-blue-600 text-white py-2 rounded-md">{modoEdicao ? "Salvar" : "Adicionar"}</button>
+                  <button type="button" onClick={fecharModal} className="flex-1 bg-gray-300 py-2 rounded-md">Cancelar</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
