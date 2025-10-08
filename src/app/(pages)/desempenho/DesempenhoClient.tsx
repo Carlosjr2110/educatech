@@ -35,10 +35,14 @@ export default function DesempenhoClient({ userRole, userId, alunoIdInicial }: D
 
   useEffect(() => {
     // Só carregar quando houver aluno selecionado E não for o carregamento inicial
-    if (alunoSelecionado && userRole === "professor") {
-      carregarDados();
+    // Verificar se o aluno selecionado está na lista de alunos carregados
+    if (alunoSelecionado && userRole === "professor" && alunos.length > 0) {
+      const alunoExiste = alunos.some(a => a.id === alunoSelecionado);
+      if (alunoExiste) {
+        carregarDados();
+      }
     }
-  }, [alunoSelecionado]);
+  }, [alunoSelecionado, alunos]);
 
   const carregarTurmasEAlunos = async () => {
     setLoading(true);
@@ -69,7 +73,6 @@ export default function DesempenhoClient({ userRole, userId, alunoIdInicial }: D
       }
     } catch (error: any) {
       console.error("Erro ao carregar turmas e alunos:", error);
-      toast.error("Erro ao carregar dados. Tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -84,7 +87,6 @@ export default function DesempenhoClient({ userRole, userId, alunoIdInicial }: D
       setDesempenho(desempenhoData);
     } catch (error: any) {
       console.error("Erro ao carregar desempenho:", error);
-      toast.error("Erro ao carregar dados de desempenho. Tente novamente.");
     } finally {
       setLoading(false);
     }
@@ -193,7 +195,13 @@ export default function DesempenhoClient({ userRole, userId, alunoIdInicial }: D
                           // Selecionar primeiro aluno da turma
                           const alunosDaTurma = alunos.filter(a => a.turma.id === turma.id);
                           if (alunosDaTurma.length > 0) {
+                            // Limpar desempenho antes de selecionar novo aluno
+                            setDesempenho(null);
                             setAlunoSelecionado(alunosDaTurma[0].id);
+                          } else {
+                            // Se não houver alunos na turma, limpar seleção
+                            setDesempenho(null);
+                            setAlunoSelecionado("");
                           }
                         }}
                         className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
@@ -217,7 +225,11 @@ export default function DesempenhoClient({ userRole, userId, alunoIdInicial }: D
                     {alunosFiltrados.map(aluno => (
                       <button
                         key={aluno.id}
-                        onClick={() => setAlunoSelecionado(aluno.id)}
+                        onClick={() => {
+                          // Limpar desempenho antes de selecionar novo aluno
+                          setDesempenho(null);
+                          setAlunoSelecionado(aluno.id);
+                        }}
                         className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                           alunoSelecionado === aluno.id
                             ? "bg-blue-600 text-white"
